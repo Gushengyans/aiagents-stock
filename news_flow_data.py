@@ -18,8 +18,13 @@ class NewsFlowDataFetcher:
     """新闻流量数据获取器"""
     
     def __init__(self):
-        # self.base_url = "https://newsapi.ws4.cn/api/v1/dailynews/"
-        self.base_url = "https://orz.ai/api/v1/dailynews/"
+        # 多数据源回退（issue #62/#36）：任一源失效自动切换
+        # 历史源 newsapi.ws4.cn / orz.ai 均出现过不可用，按顺序尝试
+        self.base_urls = [
+            "https://newsapi.ws4.cn/api/v1/dailynews/",
+            "https://orz.ai/api/v1/dailynews/",
+        ]
+        self.base_url = self.base_urls[0]
         self.timeout = 10
         
         # 支持的平台配置 - 扩展到22个平台
@@ -93,60 +98,53 @@ class NewsFlowDataFetcher:
                 'error': str (如果失败)
             }
         """
-        try:
-            url = f"{self.base_url}?platform={platform}"
-            
-            logger.info(f"正在获取 {platform} 平台数据...")
-            response = requests.get(url, timeout=self.timeout)
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            if data.get('status') == '200':
-                news_list = data.get('data', [])
-                platform_info = self.platforms.get(platform, {})
-                
-                # 为每条新闻添加排名信息
-                for i, news in enumerate(news_list):
-                    news['rank'] = i + 1
-                    news['platform'] = platform
-                
-                return {
-                    'success': True,
-                    'platform': platform,
-                    'platform_name': platform_info.get('name', platform),
-                    'category': platform_info.get('category', 'other'),
-                    'weight': platform_info.get('weight', 5),
-                    'influence': platform_info.get('influence', 'medium'),
-                    'data': news_list,
-                    'count': len(news_list),
-                    'fetch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                }
-            else:
-                return {
-                    'success': False,
-                    'platform': platform,
-                    'error': f"API返回错误: {data.get('msg', '未知错误')}"
-                }
-                
-        except requests.exceptions.Timeout:
-            return {
-                'success': False,
-                'platform': platform,
-                'error': f"请求超时（{self.timeout}秒）"
-            }
-        except requests.exceptions.ConnectionError:
-            return {
-                'success': False,
-                'platform': platform,
-                'error': "网络连接失败"
-            }
-        except Exception as e:
-            return {
-                'success': False,
-                'platform': platform,
-                'error': f"获取数据失败: {str(e)}"
-            }
+        last_error = None
+        for base_url in list(getattr(self, 'base_urls', [self.base_url])):
+            try:
+                url = f"{base_url}?platform={platform}"
+
+                logger.info(f"正在获取 {platform} 平台数据... ({base_url})")
+                response = requests.get(url, timeout=self.timeout)
+                response.raise_for_status()
+
+                data = response.json()
+
+                if data.get('status') == '200':
+                    self.base_url = base_url  # 记住可用源
+                    news_list = data.get('data', [])
+                    platform_info = self.platforms.get(platform, {})
+
+                    # 为每条新闻添加排名信息
+                    for i, news in enumerate(news_list):
+                        news['rank'] = i + 1
+                        news['platform'] = platform
+
+                    return {
+                        'success': True,
+                        'platform': platform,
+                        'platform_name': platform_info.get('name', platform),
+                        'category': platform_info.get('category', 'other'),
+                        'weight': platform_info.get('weight', 5),
+                        'influence': platform_info.get('influence', 'medium'),
+                        'data': news_list,
+                        'count': len(news_list),
+                        'fetch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    }
+                else:
+                    last_error = f"API返回错误: {data.get('msg', '未知错误')}"
+
+            except requests.exceptions.Timeout:
+                last_error = f"请求超时（{self.timeout}秒）"
+            except requests.exceptions.ConnectionError:
+                last_error = "网络连接失败"
+            except Exception as e:
+                last_error = f"获取数据失败: {str(e)}"
+
+        return {
+            'success': False,
+            'platform': platform,
+            'error': last_error or "所有新闻数据源均不可用"
+        }
     
     def get_multi_platform_news(self, platforms: List[str] = None, 
                                  category: str = None) -> Dict:

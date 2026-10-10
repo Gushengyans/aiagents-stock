@@ -23,10 +23,45 @@ class StockDataFetcher:
         self.info = None
         self.financial_data = None
         self.data_source_manager = data_source_manager
-        
+
+    @staticmethod
+    def normalize_symbol(symbol):
+        """规范化股票代码，去掉市场后缀，保证数据源能识别。
+
+        处理 issue #16：持仓/批量输入 `600519.SH` 这类带后缀代码时，
+        原先 `isdigit()` 判断失败，被当成美股导致获取数据全部失败。
+
+        Examples:
+            600519.SH / 600519.sh / 600519.XSHG -> 600519
+            000001.SZ / 000001.SZSE -> 000001
+            430047.BJ -> 430047
+            00700.HK / HK00700 -> 00700
+            AAPL -> AAPL
+        """
+        if symbol is None:
+            return symbol
+        s = str(symbol).strip().upper()
+        if not s:
+            return s
+
+        # A股/北交所常见后缀
+        for suffix in ('.SHSE', '.SZSE', '.XSHG', '.XSHE', '.SH', '.SZ', '.BJ', '.BSE'):
+            if s.endswith(suffix):
+                s = s[:-len(suffix)]
+                break
+
+        # 港股：00700.HK -> 00700；HK00700 -> 00700
+        if s.endswith('.HK'):
+            s = s[:-3]
+        if s.startswith('HK') and s[2:].isdigit():
+            s = s[2:]
+
+        return s
+
     def get_stock_info(self, symbol):
         """获取股票基本信息"""
         try:
+            symbol = self.normalize_symbol(symbol)
             # 处理中国A股
             if self._is_chinese_stock(symbol):
                 return self._get_chinese_stock_info(symbol)
@@ -38,10 +73,11 @@ class StockDataFetcher:
                 return self._get_us_stock_info(symbol)
         except Exception as e:
             return {"error": f"获取股票信息失败: {str(e)}"}
-    
+
     def get_stock_data(self, symbol, period="1y", interval="1d"):
         """获取股票历史数据"""
         try:
+            symbol = self.normalize_symbol(symbol)
             if self._is_chinese_stock(symbol):
                 return self._get_chinese_stock_data(symbol, period)
             elif self._is_hk_stock(symbol):
@@ -50,19 +86,21 @@ class StockDataFetcher:
                 return self._get_us_stock_data(symbol, period, interval)
         except Exception as e:
             return {"error": f"获取股票数据失败: {str(e)}"}
-    
+
     def _is_chinese_stock(self, symbol):
         """判断是否为中国A股"""
-        # 简单判断：包含数字且长度为6位的认为是中国A股
-        return symbol.isdigit() and len(symbol) == 6
+        # 兼容 600519 / 600519.SH 两种写法
+        s = self.normalize_symbol(symbol)
+        return s.isdigit() and len(s) == 6
     
     def _is_hk_stock(self, symbol):
         """判断是否为港股"""
-        # 港股代码通常是1-5位数字，或者前面带HK/hk前缀
-        if symbol.upper().startswith('HK'):
-            return True
-        # 纯数字且长度在1-5位之间，认为可能是港股
-        if symbol.isdigit() and 1 <= len(symbol) <= 5:
+        # 港股代码通常是1-5位数字，或者前面带HK/hk前缀，或 00700.HK 后缀
+        s = self.normalize_symbol(symbol)
+        if str(symbol).strip().upper().startswith('HK') or s.isdigit() and 1 <= len(s) <= 5:
+            # 排除已识别的A股6位代码
+            if s.isdigit() and len(s) == 6:
+                return False
             return True
         return False
     

@@ -64,7 +64,8 @@ st.markdown("""
     
     /* 顶部导航栏 */
     .top-nav {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background-color: #667eea;
+        background-image: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 1.5rem 2rem;
         border-radius: 15px;
         margin-bottom: 2rem;
@@ -92,7 +93,8 @@ st.markdown("""
     /* 标签页样式 */
     .stTabs [data-baseweb="tab-list"] {
         gap: 2rem;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background-color: #667eea;
+        background-image: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 1rem 2rem;
         border-radius: 15px;
         box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
@@ -121,9 +123,10 @@ st.markdown("""
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
     }
     
-    /* 侧边栏美化 */
+    /* 侧边栏美化（background-color 兜底，避免渐变失效时白底白字，issue #1） */
     .css-1d391kg, [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+        background-color: #667eea;
+        background-image: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
         padding-top: 2rem;
     }
     
@@ -172,7 +175,8 @@ st.markdown("""
     
     /* 指标卡片 */
     .metric-card {
-        background: white;
+        background-color: #ffffff;
+        color: #222222;
         padding: 1.5rem;
         border-radius: 12px;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
@@ -186,10 +190,11 @@ st.markdown("""
         box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
     }
     
-    /* 按钮美化 */
+    /* 按钮美化（必须有 background-color 兜底，否则渐变失效时白字白底） */
     .stButton>button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        background-color: #667eea;
+        background-image: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white !important;
         border: none;
         border-radius: 10px;
         padding: 0.75rem 2rem;
@@ -858,11 +863,18 @@ def parse_stock_list(stock_input):
         else:
             stock_list.append(line)
 
-    # 去重并保持顺序
+    # 去重并保持顺序；统一去掉 .SH/.SZ 等市场后缀，避免批量分析识别失败（issue #16）
+    try:
+        from stock_data import StockDataFetcher
+        normalize = StockDataFetcher.normalize_symbol
+    except Exception:
+        normalize = lambda x: x
+
     seen = set()
     unique_list = []
     for code in stock_list:
-        if code not in seen:
+        code = normalize(code)
+        if code and code not in seen:
             seen.add(code)
             unique_list.append(code)
 
@@ -880,6 +892,13 @@ def analyze_single_stock_for_batch(symbol, period, enabled_analysts_config=None,
     返回分析结果或错误信息
     """
     try:
+        # 统一去掉市场后缀（600519.SH -> 600519），避免数据源识别失败（issue #16）
+        try:
+            from stock_data import StockDataFetcher as _SDF
+            symbol = _SDF.normalize_symbol(symbol)
+        except Exception:
+            pass
+
         # 使用默认模型
         if selected_model is None:
             selected_model = config.DEFAULT_MODEL_NAME
@@ -1729,6 +1748,46 @@ def display_history_records():
         return
 
     st.write(f"📊 共找到 {len(records)} 条分析记录")
+
+    # 批量删除（issue #56：支持一键全删 / 按日期范围删，避免逐条点删）
+    with st.expander("🗑️ 批量删除历史记录", expanded=False):
+        del_col1, del_col2 = st.columns(2)
+        with del_col1:
+            st.caption("按日期范围删除")
+            date_from = st.date_input("开始日期（含）", value=None, key="hist_del_from")
+            date_to = st.date_input("结束日期（含）", value=None, key="hist_del_to")
+            if st.button("🗑️ 删除日期范围内记录", key="hist_del_range"):
+                if not date_from and not date_to:
+                    st.warning("请至少选择一个日期")
+                else:
+                    # 构造范围条件后按 id 批量删
+                    to_delete = []
+                    for r in records:
+                        d = (r.get('analysis_date') or '')[:10]
+                        if not d:
+                            continue
+                        if date_from and d < str(date_from):
+                            continue
+                        if date_to and d > str(date_to):
+                            continue
+                        to_delete.append(r['id'])
+                    if not to_delete:
+                        st.info("该日期范围内没有记录")
+                    else:
+                        deleted = db.delete_records(to_delete)
+                        st.success(f"✅ 已删除 {deleted} 条记录")
+                        st.rerun()
+
+        with del_col2:
+            st.caption("危险操作")
+            confirm_all = st.checkbox("我确认清空全部历史记录", key="hist_del_all_confirm")
+            if st.button("⚠️ 全部删除", key="hist_del_all", type="secondary"):
+                if not confirm_all:
+                    st.warning("请先勾选确认框")
+                else:
+                    deleted = db.delete_all_records()
+                    st.success(f"✅ 已清空 {deleted} 条历史记录")
+                    st.rerun()
 
     # 搜索和筛选
     col1, col2 = st.columns([3, 1])

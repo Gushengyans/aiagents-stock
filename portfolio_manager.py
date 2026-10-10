@@ -47,8 +47,9 @@ class PortfolioManager:
             (成功标志, 消息, 股票ID)
         """
         try:
-            # 验证股票代码格式
-            code = code.strip().upper()
+            # 验证股票代码格式；去掉 .SH/.SZ 等后缀，避免后续分析识别失败（issue #16/#2）
+            from stock_data import StockDataFetcher
+            code = StockDataFetcher.normalize_symbol(code.strip().upper())
             if not code:
                 return False, "股票代码不能为空", None
             

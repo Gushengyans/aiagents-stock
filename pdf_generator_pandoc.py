@@ -1,4 +1,5 @@
 import os
+import re
 import tempfile
 import base64
 from datetime import datetime
@@ -125,8 +126,11 @@ def generate_pdf_report(stock_info, agents_results, discussion_result, final_dec
     <title>AI股票分析报告</title>
     <style>
         body {{
-            font-family: 'Microsoft YaHei', Arial, sans-serif;
-            line-height: 1.6;
+            font-family: 'SimSun', '宋体', 'Songti SC', serif;
+            font-size: 14px;
+            font-weight: 400;
+            line-height: 1.7;
+            color: #333;
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
@@ -139,36 +143,54 @@ def generate_pdf_report(stock_info, agents_results, discussion_result, final_dec
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }}
         h1 {{
+            font-family: 'Microsoft YaHei', '微软雅黑', sans-serif;
+            font-size: 22px;
+            font-weight: 700;
             color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+            margin: 0 0 16px 0;
         }}
         h2 {{
+            font-family: 'Microsoft YaHei', '微软雅黑', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
             color: #34495e;
             border-left: 4px solid #3498db;
-            padding-left: 15px;
-            margin-top: 30px;
+            padding-left: 12px;
+            margin-top: 28px;
         }}
         h3 {{
+            font-family: 'Microsoft YaHei', '微软雅黑', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
             color: #2980b9;
-            margin-top: 25px;
+            margin-top: 22px;
+        }}
+        p {{
+            margin: 8px 0;
         }}
         table {{
             width: 100%;
             border-collapse: collapse;
-            margin: 20px 0;
+            margin: 16px 0;
+            font-size: 13px;
         }}
         th, td {{
             border: 1px solid #ddd;
-            padding: 12px;
+            padding: 8px;
             text-align: left;
         }}
         th {{
             background-color: #3498db;
             color: white;
+            font-weight: 600;
         }}
         tr:nth-child(even) {{
             background-color: #f9f9f9;
+        }}
+        strong {{
+            font-weight: 600;
         }}
         .disclaimer {{
             background-color: #fff3cd;
@@ -188,19 +210,25 @@ def generate_pdf_report(stock_info, agents_results, discussion_result, final_dec
 <body>
     <div class="container">
 """
-        
-        # 将Markdown转换为HTML（简单版本）
-        html_body = markdown_content.replace('\n# ', '\n<h1>').replace('\n## ', '\n<h2>').replace('\n### ', '\n<h3>')
+
+        # 将Markdown转换为HTML
+        # 修复 issue #56：标题必须闭合；**加粗**必须成对替换
+        # （原先 .replace('**','<strong>').replace('**','</strong>') 会把所有 ** 都变成 <strong>）
+        html_body = re.sub(
+            r'(?m)^(#{1,3})\s+(.*)$',
+            lambda m: f'<h{len(m.group(1))}>{m.group(2).strip()}</h{len(m.group(1))}>',
+            markdown_content
+        )
         html_body = html_body.replace('\n---\n', '\n<hr>\n')
-        html_body = html_body.replace('**', '<strong>').replace('**', '</strong>')
+        html_body = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html_body)
         html_body = html_body.replace('\n\n', '</p><p>')
         html_body = f"<p>{html_body}</p>"
-        
+
         # 处理表格
         lines = html_body.split('\n')
         in_table = False
         processed_lines = []
-        
+
         for line in lines:
             if '|' in line and not in_table:
                 processed_lines.append('<table>')
@@ -224,12 +252,14 @@ def generate_pdf_report(stock_info, agents_results, discussion_result, final_dec
                 in_table = False
             else:
                 processed_lines.append(line)
-        
+
         if in_table:
             processed_lines.append('</table>')
-        
+
         html_body = '\n'.join(processed_lines)
-        
+        html_body = re.sub(r'<p>\s*(<h[1-3]>.*?</h[1-3]>)\s*', r'\1<p>', html_body)
+        html_body = html_body.replace('<p></p>', '')
+
         html_content += html_body + """
     </div>
 </body>

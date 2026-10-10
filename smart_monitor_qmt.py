@@ -24,7 +24,8 @@ class SmartMonitorQMT:
         self.xt_trader = None
         self.account = None
         self.connected = False
-        
+        self.mini_qmt_path = mini_qmt_path or os.getenv('MINIQMT_USERDATA_PATH', '')
+
         # 尝试导入miniQMT
         try:
             from xtquant import xttrader, xtdata
@@ -34,6 +35,8 @@ class SmartMonitorQMT:
         except ImportError as e:
             self.logger.warning(f"miniQMT模块未安装: {e}")
             self.logger.warning("将使用模拟模式（不实际下单）")
+            self.xttrader = None
+            self.xtdata = None
     
     def connect(self, account_id: str = None) -> bool:
         """
@@ -60,24 +63,50 @@ class SmartMonitorQMT:
             return False
         
         try:
-            # 创建交易对象
-            self.xt_trader = self.xttrader.XtQuantTrader()
-            
+            # XtQuantTrader 必须传入 path（miniQMT userdata 目录）和 session（会话ID）
+            # 缺参会抛: XtQuantTrader.__init__() missing 2 required positional arguments（issue #7）
+            path = self.mini_qmt_path or os.getenv('MINIQMT_USERDATA_PATH', '')
+            if not path:
+                self.logger.error(
+                    "未配置 miniQMT userdata 路径，请设置 MINIQMT_USERDATA_PATH "
+                    "（例如 C:\\国金QMT交易端\\userdata_mini）"
+                )
+                self.connected = False
+                return False
+
+            session_raw = os.getenv('MINIQMT_SESSION_ID', '')
+            try:
+                session = int(session_raw) if session_raw else (os.getpid() % 100000)
+            except ValueError:
+                session = os.getpid() % 100000
+
+            self.xt_trader = self.xttrader.XtQuantTrader(path, session)
+
             # 连接
             self.xt_trader.start()
-            
-            # 连接账户
-            self.account = self.xttrader.StockAccount(account_id)
+
+            # 连接账户（StockAccount 在部分版本位于 xttype）
+            try:
+                self.account = self.xttrader.StockAccount(account_id)
+            except AttributeError:
+                from xtquant.xttype import StockAccount
+                self.account = StockAccount(account_id)
+
             connect_result = self.xt_trader.connect()
-            
+
             if connect_result == 0:
+                # 订阅账户回调，部分版本必须 subscribe 后才能查询/下单
+                try:
+                    self.xt_trader.subscribe(self.account)
+                except Exception as sub_err:
+                    self.logger.warning(f"订阅账户失败（不影响连接）: {sub_err}")
                 self.connected = True
                 self.logger.info(f"miniQMT连接成功，账户: {account_id}")
                 return True
             else:
                 self.logger.error(f"miniQMT连接失败，错误码: {connect_result}")
                 return False
-                
+
         except Exception as e:
             self.logger.error(f"连接miniQMT失败: {e}")
             return False

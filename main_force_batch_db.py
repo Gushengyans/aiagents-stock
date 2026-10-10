@@ -253,7 +253,33 @@ class MainForceBatchDatabase:
         conn.close()
         
         return affected_rows > 0
-    
+
+    def delete_records(self, record_ids: List[int]) -> int:
+        """批量删除指定记录，返回删除条数"""
+        if not record_ids:
+            return 0
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        placeholders = ','.join('?' * len(record_ids))
+        cursor.execute(
+            f'DELETE FROM batch_analysis_history WHERE id IN ({placeholders})',
+            list(record_ids)
+        )
+        affected_rows = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return affected_rows
+
+    def delete_all_history(self) -> int:
+        """清空全部批量分析历史，返回删除条数（issue #56）"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM batch_analysis_history')
+        affected_rows = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return affected_rows
+
     def get_statistics(self) -> Dict:
         """
         获取统计信息

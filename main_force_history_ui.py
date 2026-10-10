@@ -54,7 +54,18 @@ def display_batch_history():
             return
         
         st.markdown(f"### 📋 最近 {len(history_records)} 条记录")
-        
+
+        # 批量删除（issue #56）
+        with st.expander("🗑️ 批量删除历史", expanded=False):
+            confirm_all = st.checkbox("我确认清空全部批量分析历史", key="mf_hist_del_all_confirm")
+            if st.button("⚠️ 全部删除", key="mf_hist_del_all"):
+                if not confirm_all:
+                    st.warning("请先勾选确认框")
+                else:
+                    deleted = batch_db.delete_all_history()
+                    st.success(f"✅ 已清空 {deleted} 条历史记录")
+                    st.rerun()
+
         # 显示每条记录
         for idx, record in enumerate(history_records):
             with st.expander(

@@ -155,7 +155,8 @@ def display_pdf_export_section(stock_info, agents_results, discussion_result, fi
                     # 生成Markdown内容
                     markdown_content = generate_markdown_report(stock_info, agents_results, discussion_result, final_decision)
                     
-                    # 生成HTML内容
+                    # 生成HTML内容（复用主力选股的转换器，修复未定义 NameError）
+                    from main_force_pdf_generator import generate_html_content
                     html_content = generate_html_content(markdown_content)
                     
                     # 生成文件名

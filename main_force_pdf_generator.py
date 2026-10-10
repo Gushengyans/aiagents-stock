@@ -207,7 +207,12 @@ def generate_main_force_markdown_report(analyzer, result):
 
 
 def generate_html_content(markdown_content):
-    """将Markdown转换为HTML"""
+    """将Markdown转换为HTML
+
+    修复 issue #56：原先标题标签不闭合，导致后续正文全部落入 h1，
+    呈现为「全是粗体、字号超大」。现改为正确闭合标签，并使用宋体正文、
+    仅标题/强调加粗。
+    """
     html_content = f"""
 <!DOCTYPE html>
 <html>
@@ -216,8 +221,11 @@ def generate_html_content(markdown_content):
     <title>主力选股AI分析报告</title>
     <style>
         body {{
-            font-family: 'Microsoft YaHei', Arial, sans-serif;
-            line-height: 1.6;
+            font-family: 'SimSun', '宋体', 'Songti SC', serif;
+            font-size: 14px;
+            font-weight: 400;
+            line-height: 1.7;
+            color: #333;
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
@@ -230,25 +238,38 @@ def generate_html_content(markdown_content):
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }}
         h1 {{
+            font-family: 'Microsoft YaHei', '微软雅黑', sans-serif;
+            font-size: 22px;
+            font-weight: 700;
             color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+            margin: 0 0 16px 0;
         }}
         h2 {{
+            font-family: 'Microsoft YaHei', '微软雅黑', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
             color: #34495e;
             border-left: 4px solid #3498db;
-            padding-left: 15px;
-            margin-top: 30px;
+            padding-left: 12px;
+            margin-top: 28px;
         }}
         h3 {{
+            font-family: 'Microsoft YaHei', '微软雅黑', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
             color: #2980b9;
-            margin-top: 25px;
+            margin-top: 22px;
+        }}
+        p {{
+            margin: 8px 0;
         }}
         table {{
             width: 100%;
             border-collapse: collapse;
-            margin: 20px 0;
-            font-size: 14px;
+            margin: 16px 0;
+            font-size: 13px;
         }}
         th, td {{
             border: 1px solid #ddd;
@@ -258,7 +279,7 @@ def generate_html_content(markdown_content):
         th {{
             background-color: #3498db;
             color: white;
-            font-weight: bold;
+            font-weight: 600;
         }}
         tr:nth-child(even) {{
             background-color: #f9f9f9;
@@ -281,11 +302,12 @@ def generate_html_content(markdown_content):
         }}
         hr {{
             border: none;
-            height: 2px;
+            height: 1px;
             background-color: #ecf0f1;
             margin: 20px 0;
         }}
         strong {{
+            font-weight: 600;
             color: #2c3e50;
         }}
         ul, ol {{
@@ -293,28 +315,32 @@ def generate_html_content(markdown_content):
             padding-left: 30px;
         }}
         li {{
-            margin: 5px 0;
+            margin: 4px 0;
         }}
     </style>
 </head>
 <body>
     <div class="container">
 """
-    
-    # 简单的Markdown到HTML转换
+
+    def _close_heading(match):
+        level = len(match.group(1))
+        text = match.group(2).strip()
+        return f'<h{level}>{text}</h{level}>'
+
     html_body = markdown_content
-    html_body = html_body.replace('\n# ', '\n<h1>').replace('\n## ', '\n<h2>').replace('\n### ', '\n<h3>')
-    html_body = html_body.replace('# ', '<h1>').replace('## ', '<h2>').replace('### ', '<h3>')
+    # 标题：正确闭合标签（# / ## / ###）
+    html_body = re.sub(r'(?m)^(#{1,3})\s+(.*)$', _close_heading, html_body)
     html_body = html_body.replace('\n---\n', '\n<hr>\n')
-    
-    # 处理粗体文本
-    html_body = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', html_body)
-    
+
+    # 加粗（成对替换，避免全部变成 <strong>）
+    html_body = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html_body)
+
     # 处理表格
     lines = html_body.split('\n')
     in_table = False
     processed_lines = []
-    
+
     for line in lines:
         if '|' in line and not in_table and line.strip().startswith('|'):
             processed_lines.append('<table>')
@@ -337,28 +363,31 @@ def generate_html_content(markdown_content):
             processed_lines.append(line)
         else:
             processed_lines.append(line)
-    
+
     if in_table:
         processed_lines.append('</table>')
-    
+
     html_body = '\n'.join(processed_lines)
-    
+
     # 处理列表
     html_body = re.sub(r'\n- (.*)', r'\n<li>\1</li>', html_body)
     html_body = re.sub(r'(<li>.*</li>)\n(?!<li>)', r'<ul>\1</ul>\n', html_body)
     html_body = re.sub(r'(<li>.*</li>\n)+', lambda m: '<ul>\n' + m.group(0) + '</ul>\n', html_body)
-    
+
     # 处理换行
     html_body = html_body.replace('\n\n', '</p><p>')
     html_body = '<p>' + html_body + '</p>'
-    
+    # 清理空段落与标题被包进 p 的情况
+    html_body = re.sub(r'<p>\s*(<h[1-3]>.*?</h[1-3]>)\s*', r'\1<p>', html_body)
+    html_body = html_body.replace('<p></p>', '')
+
     html_content += html_body
     html_content += """
     </div>
 </body>
 </html>
 """
-    
+
     return html_content
 
 

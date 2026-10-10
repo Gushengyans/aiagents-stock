@@ -89,8 +89,13 @@ class NewsAnnouncementDataFetcher:
         return data
     
     def _is_chinese_stock(self, symbol):
-        """判断是否为中国股票"""
-        return symbol.isdigit() and len(symbol) == 6
+        """判断是否为中国股票（兼容 600519.SH 写法）"""
+        try:
+            from stock_data import StockDataFetcher
+            s = StockDataFetcher.normalize_symbol(symbol)
+        except Exception:
+            s = str(symbol).strip().upper().split('.')[0]
+        return s.isdigit() and len(s) == 6
     
     def _get_news_data(self, symbol):
         """获取新闻数据"""

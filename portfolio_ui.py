@@ -214,17 +214,33 @@ def display_add_stock_form():
                 st.error("请输入股票代码")
             else:
                 try:
-                    portfolio_manager.add_stock(
-                        code=code.strip().upper(),
-                        name=name.strip() if name else None,
+                    from stock_data import StockDataFetcher
+                    clean_code = StockDataFetcher.normalize_symbol(code.strip().upper())
+                    stock_name = name.strip() if name else None
+                    # 名称留空时自动获取（表单 help 已承诺，此前未实现）
+                    if not stock_name:
+                        try:
+                            info = StockDataFetcher().get_stock_info(clean_code)
+                            if isinstance(info, dict) and info.get('name') and not info.get('error'):
+                                stock_name = info['name']
+                        except Exception:
+                            pass
+
+                    success, msg, _stock_id = portfolio_manager.add_stock(
+                        code=clean_code,
+                        name=stock_name,
                         cost_price=cost_price if cost_price > 0 else None,
                         quantity=quantity if quantity > 0 else None,
                         note=note.strip() if note else None,
                         auto_monitor=auto_monitor
                     )
-                    st.success(f"✅ 已添加 {code} 到持仓列表")
-                    time.sleep(0.5)
-                    st.rerun()
+                    # 必须检查返回值，否则失败也会提示成功（issue #2）
+                    if success:
+                        st.success(f"✅ 已添加 {clean_code} 到持仓列表")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error(f"添加失败: {msg}")
                 except Exception as e:
                     st.error(f"添加失败: {str(e)}")
 
@@ -577,11 +593,15 @@ def display_scheduler_management():
             )
         
         with col_b:
+            # 顺序模式会把 max_workers 存成 1，min_value 必须允许 1，否则 Streamlit 抛
+            # StreamlitValueBelowMinError（issue #29）
+            saved_workers = int(portfolio_scheduler.max_workers or 1)
+            saved_workers = max(1, min(10, saved_workers))
             max_workers = st.number_input(
                 "并行线程数",
-                min_value=2,
+                min_value=1,
                 max_value=10,
-                value=portfolio_scheduler.max_workers,
+                value=saved_workers,
                 disabled=(analysis_mode == "sequential"),
                 help="仅在并行模式下生效"
             )

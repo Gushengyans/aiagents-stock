@@ -139,22 +139,59 @@ class StockAnalysisDatabase:
         """删除指定记录"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         cursor.execute('DELETE FROM analysis_records WHERE id = ?', (record_id,))
         conn.commit()
         conn.close()
-        
+
         return cursor.rowcount > 0
-    
+
+    def delete_records(self, record_ids):
+        """批量删除指定记录，返回实际删除条数"""
+        if not record_ids:
+            return 0
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        placeholders = ','.join('?' * len(record_ids))
+        cursor.execute(f'DELETE FROM analysis_records WHERE id IN ({placeholders})', list(record_ids))
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return deleted
+
+    def delete_all_records(self):
+        """清空全部历史记录，返回删除条数"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM analysis_records')
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return deleted
+
+    def delete_records_before(self, before_date):
+        """删除 analysis_date 早于指定日期（含）的记录，返回删除条数
+
+        Args:
+            before_date: 'YYYY-MM-DD' 或 'YYYY-MM-DD HH:MM:SS'
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM analysis_records WHERE analysis_date <= ?', (before_date,))
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return deleted
+
     def get_record_count(self):
         """获取记录总数"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         cursor.execute('SELECT COUNT(*) FROM analysis_records')
         count = cursor.fetchone()[0]
         conn.close()
-        
+
         return count
 
 # 全局数据库实例

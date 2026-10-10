@@ -50,6 +50,36 @@ class ConfigManager:
                 "required": False,
                 "type": "text"
             },
+            "NVIDIA_API_KEY": {
+                "value": "",
+                "description": "NVIDIA NIM API密钥（可选，OpenAI 兼容，issue #47）",
+                "required": False,
+                "type": "password"
+            },
+            "NVIDIA_BASE_URL": {
+                "value": "https://integrate.api.nvidia.com/v1",
+                "description": "NVIDIA NIM API地址",
+                "required": False,
+                "type": "text"
+            },
+            "TDX_ENABLED": {
+                "value": "false",
+                "description": "启用TDX本地行情数据源",
+                "required": False,
+                "type": "boolean"
+            },
+            "TYPESAFE_API_KEY": {
+                "value": "",
+                "description": "TypeSafe Jev 结构化决策密钥（可选）",
+                "required": False,
+                "type": "password"
+            },
+            "MINIQMT_USERDATA_PATH": {
+                "value": "",
+                "description": "miniQMT userdata 路径（如 C:\\国金QMT交易端\\userdata_mini）",
+                "required": False,
+                "type": "text"
+            },
             "TUSHARE_TOKEN": {
                 "value": "",
                 "description": "Tushare数据接口Token（可选）",
@@ -204,79 +234,64 @@ class ConfigManager:
         return config
     
     def write_env(self, config: Dict[str, str]) -> bool:
-        """保存配置到.env文件（保留未在界面中修改的其他自定义配置）"""
+        """保存配置到.env文件。
+
+        采用「按行合并」策略（issue #43）：
+        - 已存在的键原地更新，注释与未知自定义键原样保留
+        - 新键追加到文件末尾
+        - 避免整文件重写导致 TDX_ENABLED / TYPESAFE_* 等手工配置丢失
+        """
         try:
-            # 读取当前所有配置，保留界面外传入/已存在的其他自定义键
             current_env = self.read_env()
-            full_config = {**current_env, **config}
+            # 只合并本次传入的键；未传入的键保持 .env 原值
+            updates = {k: ('' if v is None else str(v)) for k, v in config.items()}
 
             lines = []
-            lines.append("# AI股票分析系统环境配置")
-            lines.append("# 由系统自动生成和管理")
-            lines.append("")
-            
-            # DeepSeek / AI 模型配置
-            lines.append("# ========== AI 模型 API 配置 ==========")
-            lines.append(f'DEEPSEEK_API_KEY="{full_config.get("DEEPSEEK_API_KEY", "")}"')
-            lines.append(f'DEEPSEEK_BASE_URL="{full_config.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")}"')
-            lines.append(f'DEFAULT_MODEL_NAME="{full_config.get("DEFAULT_MODEL_NAME", "deepseek-chat")}"')
-            lines.append(f'ORCAROUTER_API_KEY="{full_config.get("ORCAROUTER_API_KEY", "")}"')
-            lines.append(f'ORCAROUTER_BASE_URL="{full_config.get("ORCAROUTER_BASE_URL", "https://api.orcarouter.ai/v1")}"')
-            lines.append(f'ORCAROUTER_MODEL="{full_config.get("ORCAROUTER_MODEL", "orcarouter/auto")}"')
-            lines.append("")
-            
-            # 数据接口配置
-            lines.append("# ========== 数据接口配置（可选）==========")
-            lines.append(f'TUSHARE_TOKEN="{full_config.get("TUSHARE_TOKEN", "")}"')
-            lines.append(f'TDX_BASE_URL="{full_config.get("TDX_BASE_URL", "http://127.0.0.1:8080")}"')
-            lines.append(f'YDC_API_KEY="{full_config.get("YDC_API_KEY", "")}"')
-            lines.append(f'YDC_RESEARCH_EFFORT="{full_config.get("YDC_RESEARCH_EFFORT", "standard")}"')
-            lines.append("")
-            
-            # MiniQMT配置
-            lines.append("# ========== MiniQMT量化交易配置（可选）==========")
-            lines.append(f'MINIQMT_ENABLED="{full_config.get("MINIQMT_ENABLED", "false")}"')
-            lines.append(f'MINIQMT_ACCOUNT_ID="{full_config.get("MINIQMT_ACCOUNT_ID", "")}"')
-            lines.append(f'MINIQMT_HOST="{full_config.get("MINIQMT_HOST", "127.0.0.1")}"')
-            lines.append(f'MINIQMT_PORT="{full_config.get("MINIQMT_PORT", "58610")}"')
-            lines.append("")
-            
-            # 邮件通知配置
-            lines.append("# ========== 邮件通知配置（可选）==========")
-            lines.append(f'EMAIL_ENABLED="{full_config.get("EMAIL_ENABLED", "false")}"')
-            lines.append(f'SMTP_SERVER="{full_config.get("SMTP_SERVER", "")}"')
-            lines.append(f'SMTP_PORT="{full_config.get("SMTP_PORT", "587")}"')
-            lines.append(f'EMAIL_FROM="{full_config.get("EMAIL_FROM", "")}"')
-            lines.append(f'EMAIL_PASSWORD="{full_config.get("EMAIL_PASSWORD", "")}"')
-            lines.append(f'EMAIL_TO="{full_config.get("EMAIL_TO", "")}"')
-            lines.append("")
-            
-            # Webhook通知配置
-            lines.append("# ========== Webhook通知配置（可选）==========")
-            lines.append(f'WEBHOOK_ENABLED="{full_config.get("WEBHOOK_ENABLED", "false")}"')
-            lines.append(f'WEBHOOK_TYPE="{full_config.get("WEBHOOK_TYPE", "dingtalk")}"')
-            lines.append(f'WEBHOOK_URL="{full_config.get("WEBHOOK_URL", "")}"')
-            lines.append(f'WEBHOOK_KEYWORD="{full_config.get("WEBHOOK_KEYWORD", "aiagents通知")}"')
+            if self.env_file.exists():
+                lines = self.env_file.read_text(encoding='utf-8').splitlines()
+            else:
+                lines = [
+                    "# AI股票分析系统环境配置",
+                    "# 由系统自动生成和管理",
+                    "",
+                ]
 
-            # 保留其他非标准自定义键
-            written_keys = {
-                "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEFAULT_MODEL_NAME",
-                "ORCAROUTER_API_KEY", "ORCAROUTER_BASE_URL", "ORCAROUTER_MODEL",
-                "TUSHARE_TOKEN", "TDX_BASE_URL", "YDC_API_KEY", "YDC_RESEARCH_EFFORT",
-                "MINIQMT_ENABLED", "MINIQMT_ACCOUNT_ID", "MINIQMT_HOST", "MINIQMT_PORT",
-                "EMAIL_ENABLED", "SMTP_SERVER", "SMTP_PORT", "EMAIL_FROM", "EMAIL_PASSWORD", "EMAIL_TO",
-                "WEBHOOK_ENABLED", "WEBHOOK_TYPE", "WEBHOOK_URL", "WEBHOOK_KEYWORD"
-            }
-            custom_keys = {k: v for k, v in full_config.items() if k not in written_keys}
-            if custom_keys:
-                lines.append("")
-                lines.append("# ========== 其他自定义配置 ==========")
-                for k, v in custom_keys.items():
-                    lines.append(f'{k}="{v}"')
-            
-            with open(self.env_file, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(lines))
-            
+            key_to_idx = {}
+            for i, line in enumerate(lines):
+                s = line.strip()
+                if not s or s.startswith('#') or '=' not in s:
+                    continue
+                k = s.split('=', 1)[0].strip()
+                if k:
+                    key_to_idx[k] = i
+
+            def fmt(k, v):
+                v = '' if v is None else str(v)
+                # 已含引号则原样；否则统一双引号包裹
+                if (v.startswith('"') and v.endswith('"') and len(v) >= 2) or (
+                    v.startswith("'") and v.endswith("'") and len(v) >= 2
+                ):
+                    return f'{k}={v}'
+                return f'{k}="{v}"'
+
+            for k, v in updates.items():
+                line = fmt(k, v)
+                if k in key_to_idx:
+                    lines[key_to_idx[k]] = line
+                else:
+                    if lines and lines[-1].strip() != '':
+                        lines.append('')
+                    lines.append(line)
+                    key_to_idx[k] = len(lines) - 1
+
+            # 确保 default_config 中的键存在（用当前值或默认值）
+            for k, info in self.default_config.items():
+                if k not in key_to_idx:
+                    val = current_env.get(k, info.get("value", ""))
+                    lines.append(fmt(k, val))
+                    key_to_idx[k] = len(lines) - 1
+
+            self.env_file.write_text('\n'.join(lines) + '\n', encoding='utf-8')
             return True
         except Exception as e:
             print(f"保存.env文件失败: {e}")
@@ -302,12 +317,15 @@ class ConfigManager:
     
     def validate_config(self, config: Dict[str, str]) -> tuple[bool, str]:
         """验证配置"""
-        # 设置了 OrcaRouter 密钥时，DeepSeek 密钥不再是必填项（二选一）
-        has_orcarouter = bool(config.get("ORCAROUTER_API_KEY"))
+        # 设置了任一备用 OpenAI 兼容网关密钥时，DeepSeek 密钥不再是必填项
+        has_alt_engine = bool(
+            config.get("ORCAROUTER_API_KEY")
+            or config.get("NVIDIA_API_KEY")
+        )
 
         # 检查必填项
         for key, info in self.default_config.items():
-            if key == "DEEPSEEK_API_KEY" and has_orcarouter:
+            if key == "DEEPSEEK_API_KEY" and has_alt_engine:
                 continue
             if info["required"] and not config.get(key):
                 return False, f"必填项 {info['description']} 不能为空"
@@ -319,12 +337,19 @@ class ConfigManager:
                 return False, "DeepSeek API Key格式不正确（长度太短）"
 
         return True, "配置验证通过"
-    
+
     def reload_config(self):
-        """重新加载配置（重新加载.env文件）"""
+        """重新加载配置（重新加载.env文件，并刷新 config 模块常量）"""
         from dotenv import load_dotenv
         # 强制覆盖已存在的环境变量
         load_dotenv(override=True)
+        # 刷新 config 模块级常量，避免保存后仍用旧模型/旧密钥（issue #43）
+        try:
+            import config as config_module
+            if hasattr(config_module, 'reload_from_env'):
+                config_module.reload_from_env()
+        except Exception as e:
+            print(f"刷新 config 模块失败: {e}")
 
 
 # 全局配置管理器实例

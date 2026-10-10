@@ -4,6 +4,59 @@ from dotenv import load_dotenv
 # 加载环境变量（override=True 强制覆盖已存在的环境变量）
 load_dotenv(override=True)
 
+def reload_from_env():
+    """重新从 .env / 环境变量刷新本模块的配置常量（issue #43）。
+
+    原先 load_dotenv 后 config.DEFAULT_MODEL_NAME 等模块级常量不会更新，
+    导致 Web 保存配置后仍使用旧模型，必须重启才生效。
+    """
+    global DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
+    global ORCAROUTER_API_KEY, ORCAROUTER_BASE_URL, ORCAROUTER_MODEL
+    global NVIDIA_API_KEY, NVIDIA_BASE_URL
+    global DEFAULT_MODEL_NAME
+    global TYPESAFE_API_KEY, TYPESAFE_BASE_URL, TYPESAFE_MODEL
+    global TYPESAFE_TIMEOUT_SEC, JEV_MIN_CONFIDENCE, JEV_ALERT_MIN_CONFIDENCE
+    global YDC_API_KEY, TUSHARE_TOKEN, MINIQMT_CONFIG, TDX_CONFIG
+
+    load_dotenv(override=True)
+
+    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+    DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+
+    ORCAROUTER_API_KEY = os.getenv("ORCAROUTER_API_KEY", "")
+    ORCAROUTER_BASE_URL = os.getenv("ORCAROUTER_BASE_URL", "https://api.orcarouter.ai/v1")
+    ORCAROUTER_MODEL = os.getenv("ORCAROUTER_MODEL", "orcarouter/auto")
+
+    NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+    NVIDIA_BASE_URL = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
+
+    DEFAULT_MODEL_NAME = os.getenv(
+        "DEFAULT_MODEL_NAME",
+        ORCAROUTER_MODEL if ORCAROUTER_API_KEY else "deepseek-chat"
+    )
+
+    TYPESAFE_API_KEY = os.getenv("TYPESAFE_API_KEY", "")
+    TYPESAFE_BASE_URL = os.getenv("TYPESAFE_BASE_URL", "https://api.typesafe.ai/v1")
+    TYPESAFE_MODEL = os.getenv("TYPESAFE_MODEL", "jev-latest")
+    TYPESAFE_TIMEOUT_SEC = float(os.getenv("TYPESAFE_TIMEOUT_SEC", "10"))
+    JEV_MIN_CONFIDENCE = float(os.getenv("JEV_MIN_CONFIDENCE", "0.5"))
+    JEV_ALERT_MIN_CONFIDENCE = float(os.getenv("JEV_ALERT_MIN_CONFIDENCE", "0.6"))
+
+    YDC_API_KEY = os.getenv("YDC_API_KEY", "")
+    TUSHARE_TOKEN = os.getenv("TUSHARE_TOKEN", "")
+
+    MINIQMT_CONFIG = {
+        'enabled': os.getenv("MINIQMT_ENABLED", "false").lower() == "true",
+        'account_id': os.getenv("MINIQMT_ACCOUNT_ID", ""),
+        'host': os.getenv("MINIQMT_HOST", "127.0.0.1"),
+        'port': int(os.getenv("MINIQMT_PORT", "58610")),
+    }
+
+    TDX_CONFIG = {
+        'enabled': os.getenv("TDX_ENABLED", "false").lower() == "true",
+        'base_url': os.getenv("TDX_BASE_URL", "http://192.168.1.222:8181"),
+    }
+
 # DeepSeek API配置
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
@@ -12,6 +65,10 @@ DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"
 ORCAROUTER_API_KEY = os.getenv("ORCAROUTER_API_KEY", "")
 ORCAROUTER_BASE_URL = os.getenv("ORCAROUTER_BASE_URL", "https://api.orcarouter.ai/v1")
 ORCAROUTER_MODEL = os.getenv("ORCAROUTER_MODEL", "orcarouter/auto")
+
+# NVIDIA NIM API配置（可选，OpenAI 兼容；设置了 NVIDIA_API_KEY 后可作为 AI 引擎，issue #47）
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+NVIDIA_BASE_URL = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
 
 # 默认AI模型名称（支持任何OpenAI兼容的模型）
 # 设置了 ORCAROUTER_API_KEY 时，默认模型自动落到 OrcaRouter 的配置模型

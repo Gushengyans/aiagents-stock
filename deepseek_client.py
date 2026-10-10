@@ -4,13 +4,15 @@ from typing import Dict, List, Any, Optional
 import config
 
 class DeepSeekClient:
-    """DeepSeek API客户端"""
-    
-    def __init__(self, model=None):
+    """DeepSeek / OpenAI 兼容 API 客户端（支持 NVIDIA NIM 等，issue #47）"""
+
+    def __init__(self, model=None, api_key=None, base_url=None):
         self.model = model or config.DEFAULT_MODEL_NAME
+        self.api_key = api_key or config.DEEPSEEK_API_KEY
+        self.base_url = base_url or config.DEEPSEEK_BASE_URL
         self.client = openai.OpenAI(
-            api_key=config.DEEPSEEK_API_KEY,
-            base_url=config.DEEPSEEK_BASE_URL
+            api_key=self.api_key,
+            base_url=self.base_url
         )
         
     def call_api(self, messages: List[Dict[str, str]], model: Optional[str] = None, 

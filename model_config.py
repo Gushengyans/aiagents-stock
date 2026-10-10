@@ -25,6 +25,13 @@ _preset_models = {
     "Ring-1T": "蚂蚁百灵 (硅基流动)",
     "step3": "阶跃星辰(硅基流动)",
     "orcarouter/auto": "OrcaRouter 自动路由",
+    # NVIDIA NIM（OpenAI 兼容，需配置 NVIDIA_API_KEY，issue #47）
+    "meta/llama-3.1-70b-instruct": "Llama 3.1 70B (NVIDIA)",
+    "meta/llama-3.3-70b-instruct": "Llama 3.3 70B (NVIDIA)",
+    "qwen/qwen3-235b-a22b-instruct-2507": "Qwen3 235B (NVIDIA)",
+    "deepseek-ai/deepseek-r1": "DeepSeek-R1 (NVIDIA)",
+    "mistralai/mistral-large-2-instruct": "Mistral Large 2 (NVIDIA)",
+    "nvidia/llama-3.1-nemotron-70b-instruct": "Nemotron 70B (NVIDIA)",
 }
 
 # 获取 .env 中配置的默认模型名称

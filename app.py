@@ -435,9 +435,40 @@ def main():
 
         st.markdown("---")
 
-        # 显示当前模型信息
+        # 显示当前模型信息 + 可切换模型（issue #43：选择需持久化，刷新不丢）
         show_current_model_info()
-        st.session_state.selected_model = config.DEFAULT_MODEL_NAME
+        try:
+            from model_config import model_options
+            _options = list(model_options.keys())
+            if not _options:
+                _options = [config.DEFAULT_MODEL_NAME]
+            _current = st.session_state.get('selected_model') or config.DEFAULT_MODEL_NAME
+            if _current not in _options:
+                _options = [_current] + _options
+            _idx = _options.index(_current)
+            _picked = st.selectbox(
+                "分析模型",
+                options=_options,
+                index=_idx,
+                format_func=lambda x: model_options.get(x, x),
+                key="sidebar_model_picker",
+                help="选择后自动写入 .env 的 DEFAULT_MODEL_NAME，刷新后仍生效",
+            )
+            if _picked and _picked != config.DEFAULT_MODEL_NAME:
+                st.session_state.selected_model = _picked
+                # 持久化到 .env，避免刷新后回退默认模型
+                try:
+                    from config_manager import config_manager as _cm
+                    _cm.write_env({"DEFAULT_MODEL_NAME": _picked})
+                    _cm.reload_config()
+                except Exception as _e:
+                    st.caption(f"⚠️ 保存模型选择失败: {_e}")
+            else:
+                st.session_state.selected_model = _picked or config.DEFAULT_MODEL_NAME
+        except Exception:
+            st.session_state.selected_model = st.session_state.get(
+                'selected_model', config.DEFAULT_MODEL_NAME
+            )
 
         st.markdown("---")
 
@@ -2357,6 +2388,44 @@ def display_config_manager():
         - `orcarouter/auto` — 自动路由（默认）
         - `deepseek/deepseek-v4-pro` — DeepSeek V4 Pro
         - `qwen/qwen3.6-flash` — Qwen 3.6 Flash
+        """)
+
+        st.markdown("---")
+        st.markdown("### NVIDIA NIM API配置（可选）")
+        st.markdown("[NVIDIA NIM](https://build.nvidia.com) 提供 OpenAI 兼容接口。设置 `NVIDIA_API_KEY` 后（未设置 OrcaRouter 时）优先使用 NVIDIA 引擎。issue #47")
+
+        nvidia_api_key_info = config_info["NVIDIA_API_KEY"]
+        current_nvidia_api_key = st.session_state.temp_config.get("NVIDIA_API_KEY", "")
+        new_nvidia_api_key = st.text_input(
+            f"🔑 {nvidia_api_key_info['description']}",
+            value=current_nvidia_api_key,
+            type="password",
+            help="从 https://build.nvidia.com 获取 API Key",
+            key="input_nvidia_api_key"
+        )
+        st.session_state.temp_config["NVIDIA_API_KEY"] = new_nvidia_api_key
+
+        if new_nvidia_api_key:
+            st.success("✅ NVIDIA NIM 已配置")
+
+        nvidia_base_url_info = config_info["NVIDIA_BASE_URL"]
+        current_nvidia_base_url = st.session_state.temp_config.get(
+            "NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"
+        )
+        new_nvidia_base_url = st.text_input(
+            f"🌐 {nvidia_base_url_info['description']}",
+            value=current_nvidia_base_url,
+            help="一般无需修改",
+            key="input_nvidia_base_url"
+        )
+        st.session_state.temp_config["NVIDIA_BASE_URL"] = new_nvidia_base_url
+
+        st.markdown("""
+        **NVIDIA 常用模型（填入上方「AI模型名称」）：**
+        - `meta/llama-3.3-70b-instruct`
+        - `qwen/qwen3-235b-a22b-instruct-2507`
+        - `deepseek-ai/deepseek-r1`
+        - `nvidia/llama-3.1-nemotron-70b-instruct`
         """)
 
     with tab2:
